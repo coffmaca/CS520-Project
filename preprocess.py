@@ -17,10 +17,6 @@ def split_email_addresses(line):
     if line and isinstance(line, str):
         addrs = line.split(',')
         addrs = list(map(lambda x: x.strip(), addrs))
-    # elif not isinstance(line, str):
-    #     print("Failed to split email addresses for the following line:")
-    #     print(f"{line}")
-    #     addrs = None
     else:
         addrs = None
     return addrs
