@@ -40,6 +40,43 @@ def count_recipients(line):
     return count
 
 
+def compute_weighted_email_df(emails_df):
+    """To compute weighted email dataframe"""
+    new_rows = []
+
+    for row in emails_df.iterrows():
+        sender = row[1]['From'][0]
+        rec_count = row[1]['Recipient_Count']
+
+        to_set = set(row[1]['To']) if isinstance(row[1]['To'], list) else set()
+        cc_set = set(row[1]['Cc']) if isinstance(row[1]['Cc'], list) else set()
+        bcc_set = set(row[1]['Bcc']) if isinstance(row[1]['Bcc'], list) else set()
+
+        for recipient in row[1]['Recipients']:
+            if recipient in to_set:
+                base_weight = 3
+            elif recipient in cc_set:
+                base_weight = 2
+            elif recipient in bcc_set:
+                base_weight = 1
+            else:
+                continue  # Skip if recipient isn't found in any of the 3 lists
+
+            weight = base_weight / rec_count
+
+            new_rows.append({
+                'Sender': sender,
+                'Recipient': recipient,
+                'Weight': weight
+            })
+
+    new_df = pd.DataFrame(new_rows)
+
+    new_df = new_df.groupby(['Sender', 'Recipient'], as_index=False)['Weight'].sum()
+
+    return new_df
+
+
 def ingest_csv(file_path):
     # Load emails
     emails_df = pd.read_csv(file_path)
@@ -106,8 +143,13 @@ def main(file_path: str, save_df: bool = True):
         emails_df = ingest_csv(file_path)
         if save_df:
             emails_df.to_pickle('data/emails_preprocessed.pkl')
-    else:
+    elif file_path == "data/emails_preprocessed.pkl":
         emails_df = pd.read_pickle(file_path)
+        weighted_emails_df = compute_weighted_email_df(emails_df)
+    elif file_path == "data/weighted_emails_df.pkl":
+        weighted_emails_df = pd.read_pickle(file_path)
+
+    # TODO - Filter (i) senders / recipients without "Enron" in address and (ii) emails with same sender / recipient.
 
     print("")
 
@@ -115,4 +157,5 @@ def main(file_path: str, save_df: bool = True):
 if __name__ == '__main__':
     emails_path = "data/emails.csv"
     emails_df_path = "data/emails_preprocessed.pkl"
+    weighted_emails_df_path = "data/weighted_emails_df.pkl"
     main(emails_path)
