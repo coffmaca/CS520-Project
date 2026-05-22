@@ -200,4 +200,4 @@ if __name__ == '__main__':
     emails_path = "data/emails.csv"
     emails_df_path = "data/emails_df.pkl"
     weighted_emails_df_path = "data/weighted_emails_df.pkl"
-    main(emails_df_path)
+    main(emails_path)
