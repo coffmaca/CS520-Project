@@ -4,6 +4,32 @@ import pandas as pd
 # Network analysis
 import networkx as nx
 
+EMAIL_COLUMN_FILTER_LIST = [
+    'file',
+    'Mime-Version',
+    'Content-Type',
+    'Content-Transfer-Encoding',
+    'Subject',
+    'X-From',
+    'X-To',
+    'X-cc',
+    'X-bcc',
+    'X-Folder',
+    'X-Origin',
+    'X-FileName',
+    'content',
+    "user"
+]
+
+EMAIL_FILTER_LIST = [
+    "all.",
+    "all-",
+    "40enron",
+    "announcements",
+    ".report",
+    "report."
+]
+
 def get_text_from_email(msg):
     """To get the content from email objects"""
     parts = []
@@ -45,14 +71,42 @@ def compute_weighted_email_df(emails_df):
     new_rows = []
 
     for row in emails_df.iterrows():
+        break_main_loop = False
         sender = row[1]['From'][0]
         rec_count = row[1]['Recipient_Count']
+
+        # Filter outside senders and other unwanted senders
+        if "enron" not in sender:
+            break_main_loop = True
+        for substring in EMAIL_FILTER_LIST:
+            if substring in sender:
+                if "all" not in substring: # No false positive risk, so abort all of these.
+                    break_main_loop = True
+                if sender.find(substring) == 0: # False positive risk (e.g., randall.hines@enron.com), so only abort if all at start of string.
+                    break_main_loop = True
+
+        if break_main_loop:
+            continue
 
         to_set = set(row[1]['To']) if isinstance(row[1]['To'], list) else set()
         cc_set = set(row[1]['Cc']) if isinstance(row[1]['Cc'], list) else set()
         bcc_set = set(row[1]['Bcc']) if isinstance(row[1]['Bcc'], list) else set()
 
         for recipient in row[1]['Recipients']:
+            break_recipient_loop = False
+            # Filter outside recipients, other unwanted recipients, and emails to self
+            if "enron" not in recipient:
+                break_recipient_loop = True
+            for substring in EMAIL_FILTER_LIST:
+                if substring in recipient:
+                    if "all" not in substring:
+                        break_recipient_loop = True
+                    if recipient.find(substring) == 0:
+                        break_recipient_loop = True
+
+            if sender == recipient:
+                break_recipient_loop = True
+
             if recipient in to_set:
                 base_weight = 3
             elif recipient in cc_set:
@@ -60,7 +114,10 @@ def compute_weighted_email_df(emails_df):
             elif recipient in bcc_set:
                 base_weight = 1
             else:
-                continue  # Skip if recipient isn't found in any of the 3 lists
+                break_recipient_loop = True  # Skip if recipient isn't found in any of the 3 lists
+
+            if break_recipient_loop:
+                continue
 
             weight = base_weight / rec_count
 
@@ -115,22 +172,7 @@ def ingest_csv(file_path):
     del messages
 
     # Set index and drop columns
-    emails_df = emails_df.set_index('Message-ID').drop([
-        'file',
-        'Mime-Version',
-        'Content-Type',
-        'Content-Transfer-Encoding',
-        'Subject',
-        'X-From',
-        'X-To',
-        'X-cc',
-        'X-bcc',
-        'X-Folder',
-        'X-Origin',
-        'X-FileName',
-        'content',
-        'user'
-    ], axis=1)
+    emails_df = emails_df.set_index('Message-ID').drop(EMAIL_COLUMN_FILTER_LIST, axis=1)
 
     # Parse datetime
     emails_df['Date'] = pd.to_datetime(emails_df['Date'], utc=True)  # , infer_datetime_format=True)
@@ -141,21 +183,21 @@ def ingest_csv(file_path):
 def main(file_path: str, save_df: bool = True):
     if file_path == "data/emails.csv":
         emails_df = ingest_csv(file_path)
+        weighted_emails_df = compute_weighted_email_df(emails_df)
         if save_df:
-            emails_df.to_pickle('data/emails_preprocessed.pkl')
-    elif file_path == "data/emails_preprocessed.pkl":
+            emails_df.to_pickle('data/emails_df.pkl')
+            weighted_emails_df.to_pickle('data/weighted_emails_df.pkl')
+    elif file_path == "data/emails_df.pkl":
         emails_df = pd.read_pickle(file_path)
         weighted_emails_df = compute_weighted_email_df(emails_df)
+        if save_df:
+            weighted_emails_df.to_pickle('data/weighted_emails_df.pkl')
     elif file_path == "data/weighted_emails_df.pkl":
         weighted_emails_df = pd.read_pickle(file_path)
-
-    # TODO - Filter (i) senders / recipients without "Enron" in address and (ii) emails with same sender / recipient.
-
-    print("")
 
 
 if __name__ == '__main__':
     emails_path = "data/emails.csv"
-    emails_df_path = "data/emails_preprocessed.pkl"
+    emails_df_path = "data/emails_df.pkl"
     weighted_emails_df_path = "data/weighted_emails_df.pkl"
-    main(emails_path)
+    main(emails_df_path)
