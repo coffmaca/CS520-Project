@@ -1,17 +1,21 @@
 import networkx as nx
+import pandas as pd
 from load_graph import load_graph
 
 
 def compute_reachability(graph):
     nodes = graph.nodes.items()
 
-    reach = {}
+    reach = []
     for node in nodes:
-        reach[node[0]] = {}
-        reach[node[0]]["in"] = nx.ancestors(G=graph, source=node[0])
-        reach[node[0]]["out"] = nx.descendants(G=graph, source=node[0])
+        node_data = [node[0]]
+        node_data.append(len(nx.ancestors(G=graph, source=node[0])))
+        node_data.append(len(nx.descendants(G=graph, source=node[0])))
+        reach.append(node_data)
 
-    return reach
+    reach_df = pd.DataFrame(reach, columns=["Node", "Reachability (In)", "Reachability (Out)"])
+
+    return reach_df
 
 if __name__ == "__main__":
     graph_path = "graph.pkl"
@@ -19,3 +23,4 @@ if __name__ == "__main__":
     G = load_graph(graph_path)
 
     reach = compute_reachability(G)
+    pd.to_pickle(reach, "reach.pkl")
