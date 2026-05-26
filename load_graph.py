@@ -5,7 +5,7 @@ import pickle
 GRAPH_PATH = "graph.pkl"  # Update as necessary
 
 
-def main():
+def load_graph():
     with open(GRAPH_PATH, 'rb') as f:
         G = pickle.load(f)
 
@@ -13,4 +13,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    load_graph()
