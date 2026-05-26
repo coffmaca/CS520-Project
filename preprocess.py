@@ -1,8 +1,8 @@
 import email
-import pandas as pd
-
-# Network analysis
 import networkx as nx
+import pandas as pd
+import pickle
+
 
 EMAIL_COLUMN_FILTER_LIST = [
     'file',
@@ -180,24 +180,40 @@ def ingest_csv(file_path):
     return emails_df
 
 
-def main(file_path: str, save_df: bool = True):
+def create_graph(weighted_emails_df):
+    return nx.from_pandas_edgelist(weighted_emails_df,
+                                   source='Sender',
+                                   target='Recipient',
+                                   edge_attr='Weight',
+                                   create_using=nx.DiGraph)
+
+
+def main(file_path: str, save: bool = True):
     if file_path == "data/emails.csv":
         emails_df = ingest_csv(file_path)
         weighted_emails_df = compute_weighted_email_df(emails_df)
-        if save_df:
+        if save:
             emails_df.to_pickle('data/emails_df.pkl')
             weighted_emails_df.to_pickle('data/weighted_emails_df.pkl')
     elif file_path == "data/emails_df.pkl":
         emails_df = pd.read_pickle(file_path)
         weighted_emails_df = compute_weighted_email_df(emails_df)
-        if save_df:
+        if save:
             weighted_emails_df.to_pickle('data/weighted_emails_df.pkl')
     elif file_path == "data/weighted_emails_df.pkl":
         weighted_emails_df = pd.read_pickle(file_path)
+        G = create_graph(weighted_emails_df)
+        if save:
+            with open("data/graph.pkl", "wb") as f:
+                pickle.dump(G, f)
+    elif file_path == "data/graph.pkl":
+        with open("data/graph.pkl", "rb") as f:
+            G = pickle.load(f)
+
 
 
 if __name__ == '__main__':
     emails_path = "data/emails.csv"
     emails_df_path = "data/emails_df.pkl"
     weighted_emails_df_path = "data/weighted_emails_df.pkl"
-    main(emails_path)
+    main(weighted_emails_df_path)
