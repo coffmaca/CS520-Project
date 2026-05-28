@@ -5,6 +5,49 @@ from load_graph import load_graph
 import time
 
 
+def compute_degree_metrics(G):
+    degree = dict(G.degree())
+    in_degree = dict(G.in_degree())
+    out_degree = dict(G.out_degree())
+
+    degree_df = pd.DataFrame({
+        'degree': degree,
+        'in_degree': in_degree,
+        'out_degree': out_degree
+    })
+
+    degree_df.reset_index(inplace=True)
+    degree_df.rename(columns={'index': 'Node'}, inplace=True)
+
+    valid_mask = (
+            degree_df['in_degree'].notna() &
+            (degree_df['in_degree'] != 0) &
+            degree_df['out_degree'].notna() &
+            (degree_df['out_degree'] != 0)
+    )
+
+    degree_df['Ratio (In/Out)'] = np.where(
+        valid_mask,
+        degree_df['in_degree'].astype(float) / degree_df['out_degree'].astype(float),
+        0.0
+    )
+
+    degree_df = degree_df[degree_df['Ratio (In/Out)'] != 0].copy()
+
+    base_cols = ['degree', 'in_degree', 'out_degree', 'Ratio (In/Out)']
+    std_dev_cols = []
+
+    for col in base_cols:
+        new_col_name = f'{col}_std_dev'
+        std_dev_cols.append(new_col_name)
+
+        degree_df[new_col_name] = (degree_df[col] - degree_df[col].mean()) / degree_df[col].std()
+
+    degree_df['Total_std_devs'] = degree_df[std_dev_cols].sum(axis=1)
+
+    return degree_df
+
+
 def compute_reachability(graph):
     nodes = graph.nodes.items()
 
@@ -44,55 +87,65 @@ def compute_apsp_stats_df(graph):
 def compute_sp_ratio(apsp_all_df):
     all_vertices = pd.concat([apsp_all_df['Source'], apsp_all_df['Target']]).unique()
 
-    apsp_ratio_df = pd.DataFrame({'Vertex': all_vertices})
+    apsp_ratio_df = pd.DataFrame({'Node': all_vertices})
 
-    no_path_mask = apsp_all_df['Length'] == 0
+    # no_path_mask = apsp_all_df['Length'] == 0
 
-    apsp_all_df['Length'] = np.where(
-        no_path_mask,
-        10,
-        apsp_all_df['Length']
-    )
+    # apsp_all_df['Length'] = np.where(
+    #     no_path_mask,
+    #     10,
+    #     apsp_all_df['Length']
+    # )
 
     avg_out = apsp_all_df.groupby('Source')['Length'].mean().reset_index()
-    avg_out.rename(columns={'Source': 'Vertex', 'Length': 'Average Shortest Path (Out)'}, inplace=True)
+    avg_out.rename(columns={'Source': 'Node', 'Length': 'Average Shortest Path (Out)'}, inplace=True)
     avg_in = apsp_all_df.groupby('Target')['Length'].mean().reset_index()
-    avg_in.rename(columns={'Target': 'Vertex', 'Length': 'Average Shortest Path (In)'}, inplace=True)
+    avg_in.rename(columns={'Target': 'Node', 'Length': 'Average Shortest Path (In)'}, inplace=True)
 
-    apsp_ratio_df = apsp_ratio_df.merge(avg_out, on='Vertex', how='left')
-    apsp_ratio_df = apsp_ratio_df.merge(avg_in, on='Vertex', how='left')
+    apsp_ratio_df = apsp_ratio_df.merge(avg_out, on='Node', how='left')
+    apsp_ratio_df = apsp_ratio_df.merge(avg_in, on='Node', how='left')
 
-    # valid_mask = (
-    #         apsp_ratio_df['Average Shortest Path (In)'].notna() &
-    #         (apsp_ratio_df['Average Shortest Path (In)'] != 0) &
-    #         apsp_ratio_df['Average Shortest Path (Out)'].notna() &
-    #         (apsp_ratio_df['Average Shortest Path (Out)'] != 0)
-    # )
+    valid_mask = (
+            apsp_ratio_df['Average Shortest Path (In)'].notna() &
+            (apsp_ratio_df['Average Shortest Path (In)'] != 0) &
+            apsp_ratio_df['Average Shortest Path (Out)'].notna() &
+            (apsp_ratio_df['Average Shortest Path (Out)'] != 0)
+    )
 
-    apsp_ratio_df['Average Shortest Path Ratio (In/Out)'] = apsp_ratio_df['Average Shortest Path (In)'] / apsp_ratio_df['Average Shortest Path (Out)']
+    # apsp_ratio_df['Average Shortest Path Ratio (In/Out)'] = apsp_ratio_df['Average Shortest Path (In)'] / apsp_ratio_df['Average Shortest Path (Out)']
 
-    # apsp_ratio_df['Ratio (Out/In)'] = np.where(
-    #     valid_mask,
-    #     apsp_ratio_df['Average Shortest Path (In)'] / apsp_ratio_df['Average Shortest Path (Out)'],
-    #     0.0
-    # )
+    apsp_ratio_df['Ratio (Out/In)'] = np.where(
+        valid_mask,
+        apsp_ratio_df['Average Shortest Path (In)'] / apsp_ratio_df['Average Shortest Path (Out)'],
+        0.0
+    )
+
+    apsp_ratio_df = apsp_ratio_df[apsp_ratio_df['Ratio (Out/In)'] != 0]
 
     return apsp_ratio_df
 
 
 if __name__ == "__main__":
-    graph_path = "data/graph.pkl"
-    reach_df_path = "data/reach.pkl"
-    apsp_stats_df_path = "data/apsp_stats.pkl"
-    apsp_all_df_path = "data/apsp_all.pkl"
-    apsp_ratio_df_path = None # "apsp_ratio_df.pkl"
+    graph_path = "graph_filtered.pkl"
+    degree_df_path = "data/degree_df.pkl" # None # 
+    reach_df_path = "data/reach.pkl" # None #
+    apsp_stats_df_path = "data/apsp_stats.pkl" # None #
+    apsp_all_df_path = "data/apsp_all.pkl" # None #
+    apsp_ratio_df_path = "data/apsp_ratio_df.pkl" # None #
 
     G = load_graph(graph_path)
+
+    # Compute Degree Metrics
+    if degree_df_path is None:
+        degree_df = compute_degree_metrics(G)
+        pd.to_pickle(degree_df, "data/degree_df.pkl")
+    else:
+        degree_df = pd.read_pickle(degree_df_path)
 
     # Compute Reachability (To and From)
     if reach_df_path is None:
         reach_df = compute_reachability(G)
-        pd.to_pickle(reach, "data/reach.pkl")
+        pd.to_pickle(reach_df, "data/reach.pkl")
     else:
         reach_df = pd.read_pickle(reach_df_path)
 

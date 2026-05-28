@@ -202,9 +202,10 @@ def main(file_path: str, save: bool = True):
             weighted_emails_df.to_pickle('data/weighted_emails_df.pkl')
     elif file_path == "data/weighted_emails_df.pkl":
         weighted_emails_df = pd.read_pickle(file_path)
-        G = create_graph(weighted_emails_df)
+        weighted_emails_df_filtered = weighted_emails_df[weighted_emails_df["Weight"] >= 3]
+        G = create_graph(weighted_emails_df_filtered)
         if save:
-            with open("data/graph.pkl", "wb") as f:
+            with open("data/graph_filtered.pkl", "wb") as f:
                 pickle.dump(G, f)
     elif file_path == "data/graph.pkl":
         with open("data/graph.pkl", "rb") as f:

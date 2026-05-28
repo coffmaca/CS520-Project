@@ -10,5 +10,5 @@ def load_graph(path):
 
 
 if __name__ == "__main__":
-    graph_path = "graph.pkl"  # Update as necessary
+    graph_path = "graph_filtered.pkl"  # Update as necessary
     load_graph(graph_path)
