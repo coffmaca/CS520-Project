@@ -1,9 +1,10 @@
 import networkx as nx
 import numpy as np
 import pandas as pd
-from load_graph import load_graph
+from scipy.stats import kendalltau, weightedtau
 import time
 
+from load_graph import load_graph
 
 def compute_degree_metrics(G):
     degree = dict(G.degree())
@@ -125,6 +126,71 @@ def compute_sp_ratio(apsp_all_df):
     return apsp_ratio_df
 
 
+def consolidate_rankings(metric_dfs):
+    degree_df, reach_df, apsp_ratio_df, corprank_df = metric_dfs
+
+    corprank_df.rename(columns={'Email': 'Node'}, inplace=True)
+    valid_nodes_df = corprank_df["Node"]
+
+    # Create "Rank" columns
+    corprank_df.sort_values(by='Score', ascending=False, inplace=True)
+    corprank_df.reset_index(inplace=True)
+    corprank_df.rename(columns={'index': 'Rank (CorpRank)', 'Email': 'Node'}, inplace=True)
+
+    degree_df = pd.merge(left=valid_nodes_df, right=degree_df, how="left", on="Node")
+    degree_df.sort_values(by='degree', ascending=False, inplace=True)
+    degree_df.reset_index(inplace=True, drop=True)
+    degree_df.reset_index(inplace=True)
+    degree_df.rename(columns={'index': 'Rank (degree)'}, inplace=True)
+    degree_df.sort_values(by='in_degree', ascending=False, inplace=True)
+    degree_df.reset_index(inplace=True, drop=True)
+    degree_df.reset_index(inplace=True)
+    degree_df.rename(columns={'index': 'Rank (in_degree)'}, inplace=True)
+    degree_df.sort_values(by='out_degree', ascending=False, inplace=True)
+    degree_df.reset_index(inplace=True, drop=True)
+    degree_df.reset_index(inplace=True)
+    degree_df.rename(columns={'index': 'Rank (out_degree)'}, inplace=True)
+    degree_df.sort_values(by='Ratio (In/Out)', ascending=False, inplace=True)
+    degree_df.reset_index(inplace=True, drop=True)
+    degree_df.reset_index(inplace=True)
+    degree_df.rename(columns={'index': 'Rank (Ratio (In/Out))'}, inplace=True)
+    degree_df.sort_values(by='Total_std_devs', ascending=False, inplace=True)
+    degree_df.reset_index(inplace=True, drop=True)
+    degree_df.reset_index(inplace=True)
+    degree_df.rename(columns={'index': 'Rank (Total Std Devs (Degree + Ratio))'}, inplace=True)
+
+    apsp_ratio_df = pd.merge(left=valid_nodes_df, right=apsp_ratio_df, how="left", on="Node")
+    apsp_ratio_df.sort_values(by='Ratio (Out/In)', ascending=True, inplace=True)
+    apsp_ratio_df.reset_index(inplace=True, drop=True)
+    apsp_ratio_df.reset_index(inplace=True)
+    apsp_ratio_df.rename(columns={'index': 'Rank (avg_apsp_ratio)'}, inplace=True)
+
+    reach_df = pd.merge(left=valid_nodes_df, right=reach_df, how="left", on="Node")
+    reach_df["Rank (reach_in)"] = reach_df["Reachability (In)"].rank(method="dense", ascending=False).astype(int)
+    reach_df["Rank (reach_out)"] = reach_df["Reachability (Out)"].rank(method="dense", ascending=False).astype(int)
+
+    consolidated_rankings_df = pd.merge(left=corprank_df[["Node", "Rank (CorpRank)"]], right=degree_df[[
+        "Node",
+        "Rank (degree)",
+        'Rank (in_degree)',
+        'Rank (out_degree)',
+        'Rank (Ratio (In/Out))',
+        'Rank (Total Std Devs (Degree + Ratio))'
+    ]], on='Node', how='left')
+
+    consolidated_rankings_df = pd.merge(left=consolidated_rankings_df, right=apsp_ratio_df[[
+        "Node",
+        "Rank (avg_apsp_ratio)",
+    ]], on='Node', how='left')
+
+    consolidated_rankings_df = pd.merge(left=consolidated_rankings_df, right=reach_df[[
+        "Node",
+        "Rank (reach_in)",
+        "Rank (reach_out)"
+    ]], on='Node', how='left')
+
+    return consolidated_rankings_df
+
 if __name__ == "__main__":
     graph_path = "graph_filtered.pkl"
     degree_df_path = "data/degree_df.pkl" # None # 
@@ -132,6 +198,8 @@ if __name__ == "__main__":
     apsp_stats_df_path = "data/apsp_stats.pkl" # None #
     apsp_all_df_path = "data/apsp_all.pkl" # None #
     apsp_ratio_df_path = "data/apsp_ratio_df.pkl" # None #
+
+    corprank_df_path = "data/corprank_df.pkl"
 
     G = load_graph(graph_path)
 
@@ -164,5 +232,21 @@ if __name__ == "__main__":
         pd.to_pickle(apsp_ratio_df, "data/apsp_ratio_df.pkl")
     else:
         apsp_ratio_df = pd.read_pickle(apsp_ratio_df_path)
+
+    corprank_df = pd.read_pickle(corprank_df_path)
+
+    # Compute Kendall's Tau for all possible ranking metrics
+    metric_dfs = [degree_df, reach_df, apsp_ratio_df, corprank_df]
+    consolidated_rankings_df_labeled = consolidate_rankings(metric_dfs)
+    consolidated_rankings_df = consolidated_rankings_df_labeled.drop(columns="Node")
+
+    # Compute Kendall's Tau (Non-Weighted)
+    taus = []
+    for rank_type in consolidated_rankings_df.columns:
+        tau, p = kendalltau(consolidated_rankings_df["Rank (CorpRank)"], consolidated_rankings_df[rank_type])
+        weighted_tau, p = weightedtau(consolidated_rankings_df["Rank (CorpRank)"], consolidated_rankings_df[rank_type])
+        taus.append([rank_type, tau, weighted_tau])
+    taus = pd.DataFrame(data=taus, columns=["Rank Type", "Tau", "Weighted Tau"])
+    taus.sort_values(by="Weighted Tau", ascending=False, inplace=True)
 
     print("")
